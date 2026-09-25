@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     # 06:17 JST daily: pulls in new posts from the external feeds shown in the Writing section.
     - cron: '17 21 * * *'

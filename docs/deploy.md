@@ -2,7 +2,7 @@
 
 ## 本番へのリリース手順
 
-`master` に入ったものがそのまま https://www.fukubaka0825.dev に出る。直接 push はせず、必ず PR を経由する。
+`main` に入ったものがそのまま https://www.fukubaka0825.dev に出る。直接 push はせず、必ず PR を経由する。
 
 1. ブランチを切って実装する（`git switch -c feat/xxx`）
 2. `npm run ci && npm run test:e2e` を通す（[development.md](development.md)）
@@ -37,11 +37,11 @@
 
 ### ロールバック
 
-gh-pages は `force_orphan` で履歴を持たないので、**master 側を戻して再デプロイ**する。
+gh-pages は `force_orphan` で履歴を持たないので、**main 側を戻して再デプロイ**する。
 
 ```sh
 git revert <問題のコミット>   # もしくは revert PR を作って merge
-git push origin master        # PR 経由が原則。緊急時のみ
+git push origin main          # PR 経由が原則。緊急時のみ
 ```
 
 緊急でコードを触らず直前の状態に戻したいときは、Actions → Deploy → Run workflow を、戻したいコミットのブランチ/タグを指定して実行する。
@@ -51,7 +51,7 @@ git push origin master        # PR 経由が原則。緊急時のみ
 
 ```
 PR ──> ci.yml: biome ci → astro check → build(SKIP_FEEDS) → Playwright → Lighthouse(dist)
-master push ──> deploy.yml: ci.yml を再利用 → build(フィード取得あり) → gh-pages へ publish → 本番 Lighthouse
+main push ──> deploy.yml: ci.yml を再利用 → build(フィード取得あり) → gh-pages へ publish → 本番 Lighthouse
 毎日 06:17 JST ──> deploy.yml: build → 公開中の gh-pages と diff → 差分があれば publish
 ```
 
