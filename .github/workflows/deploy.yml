@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
 
+# Serialize publishes so a push and the scheduled rebuild never race on force_orphan gh-pages.
 concurrency:
   group: pages
   cancel-in-progress: false
