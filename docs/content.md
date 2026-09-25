@@ -18,7 +18,7 @@
   end: '2025-08',         // 継続中なら null
   employment: 'Part-time',
   location: 'Remote',
-  highlights: [],         // 副業は本人が公開OKな内容だけ
+  highlights: [],         // 副業は本人が公開OKな内容だけ（副業カードにも表示される）
   stack: [],
 }
 ```

@@ -1,7 +1,7 @@
 /**
  * Months are `YYYY-MM`. `end: null` means ongoing.
  * `lane` drives the trace view: main = full-time, side = part-time / 副業.
- * Side roles intentionally carry no highlights until there is something public to say about them.
+ * Side roles list only what the person has explicitly agreed to make public.
  */
 export type Role = {
   id: string
@@ -71,8 +71,13 @@ export const roles: Role[] = [
     end: '2025-08',
     employment: 'Part-time',
     location: 'Remote',
-    highlights: [],
-    stack: [],
+    highlights: [
+      'SREプラクティスのピラミッドに沿ってAS-ISを診断し、優先度をつけた改善計画を提案',
+      'Datadogを導入し、最初の一歩として簡易的なSLO運用を立ち上げ',
+      'Cloud SQLのキャパシティプランニングを自動化',
+      'インフラコストの可視化を改善',
+    ],
+    stack: ['Datadog', 'Google Cloud', 'Cloud SQL'],
   },
   {
     id: 'recho',
@@ -84,8 +89,11 @@ export const roles: Role[] = [
     end: '2025-07',
     employment: 'Part-time',
     location: 'Remote',
-    highlights: [],
-    stack: [],
+    highlights: [
+      'Datadog / Sentryを導入し、メトリクス・ログ・APMのオブザーバビリティを整備',
+      'アラートとモニタリングの仕組みを構築',
+    ],
+    stack: ['Datadog', 'Sentry'],
   },
   {
     id: 'coefont',
@@ -97,8 +105,14 @@ export const roles: Role[] = [
     end: '2025-08',
     employment: 'Part-time',
     location: 'Remote',
-    highlights: [],
-    stack: [],
+    highlights: [
+      'IaCをAWS CloudFormationからTerraformへ移行し、マルチプロバイダー対応とデリバリーの高速化を実現',
+      'アプリケーションとインフラのリリースサイクルを分離し、より安全なデリバリーを担保',
+      'アプリケーション実行基盤をAWS LambdaからAmazon ECSへ移行',
+      'AI翻訳プロダクトのバックエンド開発',
+      'toC向けプロダクトの新音声モデル対応とモデレーション機能のリプレイス',
+    ],
+    stack: ['Terraform', 'AWS', 'Amazon ECS', 'Sudachi'],
   },
   {
     id: 'mg-sre-senior',
