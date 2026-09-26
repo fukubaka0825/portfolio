@@ -1,5 +1,5 @@
 import { finePointer, gsap, reducedMotion } from './motion'
-import { Strings } from './strings'
+import { type Disc, Strings } from './strings'
 
 /**
  * Letters are inline-blocks, so the browser may break a line between any two of them. Pinning every letter
@@ -75,9 +75,8 @@ const initVariableName = (hero: HTMLElement, chars: HTMLElement[]) => {
  * The ring *is* the disc the strings wrap around, so its edge and the bent lines always line up.
  * Over links it shrinks to a dot and lets go of the lines, so buttons stay easy to aim at.
  */
-const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLElement | null) => {
-  const fine = finePointer()
-  const strings = new Strings(canvas, { gap: fine ? 22 : 18 })
+const mountStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, onDisc?: (d: Disc) => void) => {
+  const strings = new Strings(canvas, { gap: finePointer() ? 22 : 18, onDisc })
   const meta = hero.querySelector<HTMLElement>('[data-hero-meta]')
   const fitBottom = () => {
     if (meta) strings.setBottom(meta.getBoundingClientRect().top - hero.getBoundingClientRect().top)
@@ -88,8 +87,26 @@ const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLEle
   }).observe(hero)
   new IntersectionObserver(([e]) => strings.setVisible(e.isIntersecting)).observe(hero)
   document.fonts.ready.then(fitBottom)
+  fitBottom()
+  return strings
+}
 
+const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLElement | null) => {
+  const fine = finePointer()
   const R = fine ? 48 : 38
+  let overLink = false
+  // The ring is sized from the disc every frame (not by CSS), so its edge is exactly where the lines bend,
+  // including while the disc grows in and shrinks away.
+  const sizeRing =
+    ring && fine
+      ? (d: Disc) => {
+          const size = overLink ? 10 : Math.max(10, d.r * 2 - 2)
+          ring.style.width = `${size}px`
+          ring.style.height = `${size}px`
+        }
+      : undefined
+  const strings = mountStrings(hero, canvas, sizeRing)
+
   let script = true
   const local = (e: PointerEvent) => {
     const r = hero.getBoundingClientRect()
@@ -104,10 +121,6 @@ const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLEle
       const [lx, ly] = local(e)
       x(lx)
       y(ly)
-      const overLink = Boolean((e.target as Element).closest('a, button'))
-      const d = overLink ? 10 : R * 2
-      ring.style.width = `${d}px`
-      ring.style.height = `${d}px`
       ring.style.opacity = '1'
     })
     hero.addEventListener('pointerleave', () => {
@@ -117,15 +130,15 @@ const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLEle
 
   hero.addEventListener('pointermove', (e) => {
     script = false
-    const overLink = Boolean((e.target as Element).closest('a, button'))
+    overLink = Boolean((e.target as Element).closest('a, button'))
     const [lx, ly] = local(e)
     if (overLink) strings.releaseDisc()
-    else strings.setDisc(lx, ly, R + 1)
+    else strings.setDisc(lx, ly, R, fine)
   })
-  hero.addEventListener('pointerleave', () => strings.releaseDisc())
-  hero.addEventListener('pointercancel', () => strings.releaseDisc())
+  hero.addEventListener('pointerleave', () => strings.releaseDisc(true))
+  hero.addEventListener('pointercancel', () => strings.releaseDisc(true))
   hero.addEventListener('pointerup', (e) => {
-    if (e.pointerType !== 'mouse') strings.releaseDisc()
+    if (e.pointerType !== 'mouse') strings.releaseDisc(true)
   })
   hero.addEventListener('pointerdown', (e) => {
     if ((e.target as Element).closest('a, button')) return
@@ -133,23 +146,27 @@ const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLEle
   })
 
   strings.reveal()
-  // One invisible hand sweeps up through the name so the first thing you see is the lines reacting.
-  const w = hero.clientWidth
-  const h = hero.clientHeight
-  const t0 = performance.now() + 900
-  const dur = 1700
+  // One unhurried pass up through the name so the first thing you see is the lines reacting.
+  const meta = hero.querySelector<HTMLElement>('[data-hero-meta]')
+  const t0 = performance.now() + 1000
+  const dur = 2200
   const sweep = (now: number) => {
     if (!script) return
     const u = (now - t0) / dur
     if (u < 0) return requestAnimationFrame(sweep)
     if (u >= 1) {
-      strings.releaseDisc()
+      strings.releaseDisc(true)
       return
     }
+    // Read the size every frame so a resize mid-intro keeps the pass on screen.
+    const w = hero.clientWidth
+    const h = meta
+      ? meta.getBoundingClientRect().top - hero.getBoundingClientRect().top
+      : hero.clientHeight * 0.7
     const e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2
-    const x = -80 + (w + 160) * e
-    const y = h * (0.82 - 0.62 * e) + Math.sin(e * Math.PI * 2) * h * 0.06
-    strings.setDisc(x, y, fine ? 58 : 40)
+    const x = -60 + (w + 120) * e
+    const y = h * (0.72 - 0.5 * e)
+    strings.setDisc(x, y, fine ? 44 : 32, false)
     requestAnimationFrame(sweep)
     return undefined
   }
@@ -192,6 +209,8 @@ export const initHero = () => {
   })
 
   if (reducedMotion()) {
+    // The ruled wall is part of the look, not an effect: keep it, just still.
+    if (canvas) mountStrings(hero, canvas)
     hero.classList.add('is-ready')
     return
   }
