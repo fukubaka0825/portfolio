@@ -28,6 +28,14 @@ const SUB = 2
 const MIN_GAP = 2.2
 /** Below this (px and px/substep) a line is snapped to rest and stops being simulated. */
 const REST = 0.04
+/** ~0.25s at two substeps a frame: long enough for a slipped line to snap through the disc. */
+const SLIP_SUBSTEPS = 30
+/**
+ * Stroking hairlines at 2x is raster-bound. If frames keep running long while things move, drop to 1x once:
+ * a slightly softer line beats a stuttering one on a weak laptop.
+ */
+const SLOW_FRAME_MS = 24
+const SLOW_FRAMES = 40
 const REVEAL_MS = 1000
 const REVEAL_STAGGER = 18
 
@@ -41,7 +49,11 @@ type Line = {
   v: Float32Array
   /** 0 free, ±1 held on that side of the disc, 2 slipped off (ignored until the disc lets go of it). */
   hold: number
+  /** Substeps since the line slipped off the disc. */
+  slip: number
   awake: boolean
+  /** Positions at the start of the frame; the loop keeps running only while something visibly moved. */
+  prev: Float32Array
 }
 
 export type Disc = { x: number; y: number; r: number }
@@ -71,6 +83,17 @@ export class Strings {
   /** Only a disc with a visible ring hides the lines under it; the intro's invisible hand must not punch a hole. */
   private solid = false
   private scratch = new Float32Array(0)
+  /**
+   * Only the horizontal band that changed is cleared and redrawn. Stroking every hairline at device resolution
+   * each frame is what made this slow on weak CPUs; a disc usually disturbs a few rows, not the whole wall.
+   */
+  private band: [number, number] | null = null
+  private full = true
+  private maxDpr = 2
+  private lastFrame = 0
+  private slowFrames = 0
+  private stillSince = 0
+  private stack = new Float32Array(0)
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -93,12 +116,13 @@ export class Strings {
 
   resize() {
     // Hairlines need the full device resolution; at 1.5x a 1px line smears into a grey 2px one.
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2)
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr)
     const r = this.canvas.getBoundingClientRect()
     this.width = r.width
     this.height = r.height
     this.canvas.width = Math.round(r.width * this.dpr)
     this.canvas.height = Math.round(r.height * this.dpr)
+    this.full = true
     this.build()
   }
 
@@ -116,10 +140,13 @@ export class Strings {
         u: new Float32Array(this.points),
         v: new Float32Array(this.points),
         hold: 0,
+        slip: 0,
         awake: false,
+        prev: new Float32Array(this.points),
       })
     }
     this.lines = lines
+    this.full = true
     this.kick()
   }
 
@@ -176,6 +203,14 @@ export class Strings {
 
   private frame = (now: number) => {
     this.raf = 0
+    if (this.lastFrame && now - this.lastFrame < 100) {
+      this.slowFrames = now - this.lastFrame > SLOW_FRAME_MS ? this.slowFrames + 1 : 0
+      if (this.slowFrames > SLOW_FRAMES && this.maxDpr > 1) {
+        this.maxDpr = 1
+        this.resize()
+      }
+    }
+    this.lastFrame = now
     this.prevDisc = { ...this.disc }
     this.disc.x = this.target.x
     this.disc.y = this.target.y
@@ -183,7 +218,7 @@ export class Strings {
     if (Math.abs(this.target.r - this.disc.r) < 0.3) this.disc.r = this.target.r
     this.onDisc?.(this.disc)
 
-    let motion = 0
+    for (const line of this.lines) if (line.awake) line.prev.set(line.u)
     for (let s = 1; s <= SUB; s++) {
       const k = s / SUB
       const px = this.prevDisc.x + (this.disc.x - this.prevDisc.x) * k
@@ -192,23 +227,41 @@ export class Strings {
       for (const line of this.lines) {
         const near = pr >= 1 && Math.abs(line.y - py) < pr + 2
         if (near) line.awake = true
-        if (line.awake) motion = Math.max(motion, this.wave(line, near))
+        if (line.awake) this.wave(line, near)
       }
+      this.grip(px, py, pr)
+      this.press(px, py, pr)
+      // Last, so ordering and the floor always win over the disc: a line may tuck under the (opaque) disc,
+      // but never crosses a neighbour or drops into the small print.
       this.nest()
-      for (const line of this.lines) if (line.awake) this.press(line, px, py, pr)
     }
-    this.draw(now)
+    const revealing =
+      this.revealAt !== undefined && now - this.revealAt < REVEAL_MS + this.lines.length * REVEAL_STAGGER
+    this.draw(now, revealing)
 
+    let motion = 0
+    for (const line of this.lines) {
+      if (!line.awake) continue
+      const { u, prev } = line
+      for (let i = 0; i < u.length; i++) {
+        const d = Math.abs(u[i] - prev[i])
+        if (d > motion) motion = d
+      }
+    }
     const discMoving =
       this.disc.r !== this.target.r ||
       (this.disc.r > 0 && (this.disc.x !== this.prevDisc.x || this.disc.y !== this.prevDisc.y))
-    const revealing =
-      this.revealAt !== undefined && now - this.revealAt < REVEAL_MS + this.lines.length * REVEAL_STAGGER
-    // A resting pointer holding a few lines bent is a still picture: stop the loop until something moves.
-    if (motion > REST || discMoving || revealing) this.kick()
+    if (discMoving || !this.stillSince) this.stillSince = now
+    // Measured as how far anything moved on screen this frame, not as speed: a resting pointer keeps nudging
+    // the lines it holds every substep, yet the picture is still, so the loop can sleep until the next move.
+    // With the pointer parked, sub-pixel ripples left on held lines would take seconds more to die out; freezing
+    // them is invisible, and the next move picks the simulation up exactly where it stopped.
+    const settled = motion <= 0.02 || (this.disc.r > 0 && now - this.stillSince > 1500 && motion < 0.25)
+    if (!settled || discMoving || revealing) this.kick()
+    else this.stillSince = 0
   }
 
-  /** One wave-equation substep. Returns the line's fastest point speed; a quiet line is snapped to rest. */
+  /** One wave-equation substep; a quiet line is snapped to rest and stops being simulated. */
   private wave(line: Line, near: boolean) {
     const { u, v } = line
     const n = this.points
@@ -229,12 +282,13 @@ export class Strings {
       const d = Math.abs(u[i])
       if (d > reach) reach = d
     }
-    if (!near && line.hold === 0 && speed < REST && reach < REST * 4) {
+    // Under a pixel of bend with no speed left, the restoring spring would take seconds to crawl home for no
+    // visible gain; snapping flat is invisible and makes "back to rest" exact.
+    if (!near && line.hold === 0 && speed < REST && reach < 1) {
       u.fill(0)
       v.fill(0)
       line.awake = false
     }
-    return speed
   }
 
   /**
@@ -274,51 +328,127 @@ export class Strings {
     }
   }
 
-  private press(line: Line, px: number, py: number, r: number) {
-    const { u, v } = line
-    const n = this.points
-    const dyb = line.y - py
+  /** Decide which lines the disc is holding, and on which side. */
+  private grip(px: number, py: number, r: number) {
     const stretch = r * 0.85
-    if (r < 1) line.hold = 0
-    else if (line.hold === 0) {
-      if (Math.abs(dyb) < r) line.hold = dyb >= 0 ? 1 : -1
-    } else if (line.hold === 2) {
-      if (Math.abs(dyb) >= r) line.hold = 0
-    } else if (line.hold * dyb >= r) line.hold = 0
-    // Dragged past its breaking point the line slips off the disc and snaps back through it: that's the pluck.
-    else if (line.hold * dyb < -stretch) line.hold = 2
+    let lastAbove = -1
+    this.lines.forEach((line, k) => {
+      const dyb = line.y - py
+      if (r < 1) line.hold = 0
+      else if (line.hold === 0) {
+        if (Math.abs(dyb) < r) line.hold = dyb >= 0 ? 1 : -1
+      } else if (line.hold === 2) {
+        if (Math.abs(dyb) >= r) line.hold = 0
+        else if (++line.slip > SLIP_SUBSTEPS) {
+          // By now the snap has played out. Whatever is left sits wedged between held neighbours under the disc
+          // and would creep forever, so the disc takes hold of it again on whichever side it ended up.
+          const ic = Math.round((px - this.x0) / DX)
+          line.hold = line.y + (line.u[ic] ?? 0) >= py ? 1 : -1
+        }
+      } else if (line.hold * dyb >= r) line.hold = 0
+      // Dragged past its breaking point the line slips off the disc and snaps back through it: that's the pluck.
+      else if (line.hold * dyb < -stretch) {
+        line.hold = 2
+        line.slip = 0
+      }
+      if (line.hold === -1) lastAbove = k
+    })
+    // Held-below lines must all sit under held-above ones. If a line dragged down is still above a line held
+    // up (a zig-zag can do that), it lets go instead: otherwise the two would swap order around the disc.
+    for (let k = 0; k < lastAbove; k++) {
+      const line = this.lines[k]
+      if (line.hold !== 1) continue
+      line.hold = 2
+      line.slip = 0
+    }
+  }
 
-    if (line.hold !== 1 && line.hold !== -1) return
-    const side = line.hold
+  /**
+   * Push held lines out to the disc's edge. Lines held on the same side stack outward from the edge at
+   * MIN_GAP, nearest first, so a squeeze reads as nested contours instead of strokes merging into one.
+   */
+  private press(px: number, py: number, r: number) {
+    if (r < 1) return
+    const lines = this.lines
     const i0 = Math.max(1, Math.ceil((px - r - this.x0) / DX))
-    const i1 = Math.min(n - 2, Math.floor((px + r - this.x0) / DX))
-    for (let i = i0; i <= i1; i++) {
-      const ddx = this.x0 + i * DX - px
-      const edge = Math.sqrt(Math.max(0, r * r - ddx * ddx))
-      const target = py + side * edge - line.y
-      if (side * (u[i] - target) < 0) {
-        // Carry some of the disc's motion into the string so a released line overshoots instead of stopping dead.
-        v[i] = (target - u[i]) * 0.2
-        u[i] = target
+    const i1 = Math.min(this.points - 2, Math.floor((px + r - this.x0) / DX))
+    if (i1 < i0) return
+    if (this.stack.length < this.points) this.stack = new Float32Array(this.points)
+    const stack = this.stack
+    for (const side of [1, -1]) {
+      stack.fill(side > 0 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY)
+      const order = side > 0 ? lines : [...lines].reverse()
+      for (const line of order) {
+        if (line.hold !== side) continue
+        const { u, v } = line
+        for (let i = i0; i <= i1; i++) {
+          const ddx = this.x0 + i * DX - px
+          const edge = py + side * Math.sqrt(Math.max(0, r * r - ddx * ddx))
+          let y = side > 0 ? Math.max(edge, stack[i] + MIN_GAP) : Math.min(edge, stack[i] - MIN_GAP)
+          if (side > 0) y = Math.min(y, this.floor)
+          const target = y - line.y
+          if (side * (u[i] - target) < 0) {
+            // Pinned, not kicked: injecting velocity here makes a held point buzz around the edge forever while
+            // the pointer rests. The stored bend is enough to make a released line snap and ring.
+            v[i] = 0
+            u[i] = target
+          }
+          stack[i] = line.y + u[i]
+        }
       }
     }
   }
 
-  private draw(now: number) {
+  private draw(now: number, revealing: boolean) {
     const { ctx } = this
+    const lo = new Float32Array(this.lines.length)
+    const hi = new Float32Array(this.lines.length)
+    let top = Number.POSITIVE_INFINITY
+    let bottom = Number.NEGATIVE_INFINITY
+    this.lines.forEach((line, k) => {
+      let mn = 0
+      let mx = 0
+      if (line.awake) {
+        for (const d of line.u) {
+          if (d < mn) mn = d
+          else if (d > mx) mx = d
+        }
+      }
+      // Padding covers the round caps and the widest orange stroke.
+      lo[k] = line.y + mn - 4
+      hi[k] = line.y + mx + 4
+      if (line.awake) {
+        top = Math.min(top, lo[k])
+        bottom = Math.max(bottom, hi[k])
+      }
+    })
+    if (this.disc.r > 1) {
+      top = Math.min(top, this.disc.y - this.disc.r - 4)
+      bottom = Math.max(bottom, this.disc.y + this.disc.r + 4)
+    }
+    const current: [number, number] | null = top < bottom ? [top, bottom] : null
+    let y0 = 0
+    let y1 = this.height
+    if (!this.full && !revealing) {
+      // Redraw where things are now and where they were last frame, so old positions get erased too.
+      const a = current ?? this.band
+      const b = this.band ?? current
+      if (!a || !b) return
+      y0 = Math.max(0, Math.min(a[0], b[0]))
+      y1 = Math.min(this.height, Math.max(a[1], b[1]))
+    }
+    this.band = current
+    this.full = false
+    if (y1 <= y0) return
+
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-    ctx.clearRect(0, 0, this.width, this.height)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, y0, this.width, y1 - y0)
+    ctx.clip()
+    ctx.clearRect(0, y0, this.width, y1 - y0)
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.save()
-    // The disc is solid: whatever is inside it (a line snapping back through) is hidden, so the ring reads as
-    // a lens lying on the wall rather than an outline the lines run through.
-    if (this.solid && this.disc.r > 1) {
-      ctx.beginPath()
-      ctx.rect(0, 0, this.width, this.height)
-      ctx.arc(this.disc.x, this.disc.y, Math.max(0, this.disc.r - 1), 0, Math.PI * 2, true)
-      ctx.clip('evenodd')
-    }
 
     const fadeZone = this.gap * 6
     const edge = Math.min(this.height, this.bottom)
@@ -331,7 +461,7 @@ export class Strings {
         const k = Math.min(1, Math.max(0, (now - this.revealAt - li * REVEAL_STAGGER) / REVEAL_MS))
         reach = 1 - (1 - k) ** 3
       }
-      if (reach <= 0) return
+      if (reach <= 0 || hi[li] < y0 || lo[li] > y1) return
       const xEnd = this.x0 + reach * (this.points - 1) * DX
       // Lines thin out toward the bottom so the ruled wall dissolves into the plain one behind the small print.
       const fade = Math.min(1, Math.max(0, (edge - line.y) / fadeZone))
@@ -353,7 +483,7 @@ export class Strings {
           const ny = (cy + line.y + u[i]) / 2
           base.quadraticCurveTo(cx, cy, nx, ny)
           // The glow retraces the exact same curve piece, so orange sits on the ink line instead of beside it.
-          const e = Math.min(1, Math.abs(u[i - 1]) / 30)
+          const e = Math.min(1, Math.abs(u[i - 1]) / 30) * fade
           if (e > 0.12) {
             const path = hot[Math.min(HOT_BUCKETS - 1, Math.floor(e * HOT_BUCKETS))]
             path.moveTo(mx, my)
@@ -382,6 +512,17 @@ export class Strings {
       ctx.beginPath()
       ctx.arc(x, y, 1.6, 0, Math.PI * 2)
       ctx.fill()
+    }
+
+    // The disc is solid: whatever is inside it (a line snapping back through) is erased, so the ring reads as
+    // a lens lying on the wall rather than an outline the lines run through. Erasing one circle afterwards is
+    // far cheaper than clipping every stroke to a full-canvas even-odd path.
+    if (this.solid && this.disc.r > 1) {
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.beginPath()
+      ctx.arc(this.disc.x, this.disc.y, Math.max(0, this.disc.r - 1), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalCompositeOperation = 'source-over'
     }
     ctx.restore()
   }
