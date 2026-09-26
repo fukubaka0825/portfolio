@@ -1,5 +1,5 @@
-import { Brush, type Stroke } from './brush'
 import { finePointer, gsap, reducedMotion } from './motion'
+import { type Disc, Strings } from './strings'
 
 /**
  * Letters are inline-blocks, so the browser may break a line between any two of them. Pinning every letter
@@ -19,7 +19,7 @@ const pinLetterWidths = (chars: HTMLElement[]) => {
   })
 }
 
-/** Weight/width of each letter eases toward the brush, like the name flinches from wet paint. */
+/** Weight/width of each letter eases toward the cursor, like the name leans away from the disc bending the lines. */
 const initVariableName = (hero: HTMLElement, chars: HTMLElement[]) => {
   const state = chars.map(() => ({ w: 800, s: 100 }))
   let px = -9999
@@ -71,95 +71,106 @@ const initVariableName = (hero: HTMLElement, chars: HTMLElement[]) => {
   window.addEventListener('scroll', () => running && measure(), { passive: true })
 }
 
-/** A ring that shows the brush size; it swells when you slow down and pinches on a fast flick. */
-const initCursor = (hero: HTMLElement, ring: HTMLElement, brush: Brush) => {
-  const x = gsap.quickTo(ring, 'x', { duration: 0.18, ease: 'power3' })
-  const y = gsap.quickTo(ring, 'y', { duration: 0.18, ease: 'power3' })
-  const size = gsap.quickTo(ring, 'width', { duration: 0.25, ease: 'power3' })
-  const sizeH = gsap.quickTo(ring, 'height', { duration: 0.25, ease: 'power3' })
-  hero.addEventListener('pointermove', (e) => {
-    const r = hero.getBoundingClientRect()
-    const overLink = Boolean((e.target as Element).closest('a, button'))
-    x(e.clientX - r.left)
-    y(e.clientY - r.top)
-    const d = overLink ? 10 : brush.radius * 2.1
-    size(d)
-    sizeH(d)
-    ring.style.opacity = '1'
-  })
-  hero.addEventListener('pointerleave', () => {
-    ring.style.opacity = '0'
-  })
-}
-
-/** Seeded wall: an invisible hand paints a few vertical streaks, like the wall behind the avatar, then lets them run. */
-const paintIntro = (hero: HTMLElement, brush: Brush) => {
-  const w = hero.clientWidth
-  const h = hero.clientHeight
-  const plan = [
-    { fx: 0.06, y0: 0.06, len: 0.62, delay: 150, dur: 900 },
-    { fx: 0.25, y0: 0.1, len: 0.42, delay: 420, dur: 700 },
-    { fx: 0.58, y0: 0.14, len: 0.36, delay: 700, dur: 650 },
-    { fx: 0.83, y0: 0.08, len: 0.55, delay: 950, dur: 850 },
-  ]
-  const t0 = performance.now()
-  let i = 0
-  for (const p of plan) {
-    const k = i++
-    const x0 = w * p.fx
-    const y0 = h * p.y0
-    const len = h * p.len
-    const brushLife = 7000
-    const start = t0 + p.delay
-    let stroke: Stroke | undefined
-    const step = (now: number) => {
-      if (now < start) return requestAnimationFrame(step)
-      const u = Math.min(1, (now - start) / p.dur)
-      // Ease-out so the hand slows at the bottom: that is where the paint pools and drips.
-      const e = 1 - (1 - u) ** 2.2
-      const x = x0 + Math.sin(e * 5 + k) * 7
-      const y = y0 + len * e
-      if (!stroke) stroke = brush.start(x, y, now, brushLife, false)
-      else brush.extend(stroke, x, y, now)
-      if (u < 1) requestAnimationFrame(step)
-      else {
-        brush.drip(x + 3, y + 6, now, brushLife)
-        if (k % 2 === 0) brush.drip(x - 9, y - len * 0.35, now, brushLife)
-      }
-      return undefined
-    }
-    requestAnimationFrame(step)
+/**
+ * The ring *is* the disc the strings wrap around, so its edge and the bent lines always line up.
+ * Over links it shrinks to a dot and lets go of the lines, so buttons stay easy to aim at.
+ */
+const mountStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, onDisc?: (d: Disc) => void) => {
+  const strings = new Strings(canvas, { gap: finePointer() ? 22 : 18, onDisc })
+  const meta = hero.querySelector<HTMLElement>('[data-hero-meta]')
+  const fitBottom = () => {
+    if (meta) strings.setBottom(meta.getBoundingClientRect().top - hero.getBoundingClientRect().top)
   }
+  new ResizeObserver(() => {
+    strings.resize()
+    fitBottom()
+  }).observe(hero)
+  new IntersectionObserver(([e]) => strings.setVisible(e.isIntersecting)).observe(hero)
+  document.fonts.ready.then(fitBottom)
+  fitBottom()
+  return strings
 }
 
-const initPaint = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLElement | null) => {
-  const brush = new Brush(canvas, { baseWidth: finePointer() ? 26 : 18 })
-  new ResizeObserver(() => brush.resize()).observe(hero)
-  new IntersectionObserver(([e]) => brush.setVisible(e.isIntersecting)).observe(hero)
+const initStrings = (hero: HTMLElement, canvas: HTMLCanvasElement, ring: HTMLElement | null) => {
+  const fine = finePointer()
+  const R = fine ? 48 : 38
+  let overLink = false
+  // The ring is sized from the disc every frame (not by CSS), so its edge is exactly where the lines bend,
+  // including while the disc grows in and shrinks away.
+  const sizeRing =
+    ring && fine
+      ? (d: Disc) => {
+          const size = overLink ? 10 : Math.max(10, d.r * 2 - 2)
+          ring.style.width = `${size}px`
+          ring.style.height = `${size}px`
+        }
+      : undefined
+  const strings = mountStrings(hero, canvas, sizeRing)
 
+  let script = true
   const local = (e: PointerEvent) => {
     const r = hero.getBoundingClientRect()
     return [e.clientX - r.left, e.clientY - r.top] as const
   }
-  let lastMove = 0
-  hero.addEventListener('pointerdown', (e) => {
-    brush.begin(...local(e))
-  })
+
+  if (ring && fine) {
+    // No easing: the lines wrap the disc at the pointer, so a lagging ring would visibly miss the bend.
+    const x = gsap.quickSetter(ring, 'x', 'px')
+    const y = gsap.quickSetter(ring, 'y', 'px')
+    hero.addEventListener('pointermove', (e) => {
+      const [lx, ly] = local(e)
+      x(lx)
+      y(ly)
+      ring.style.opacity = '1'
+    })
+    hero.addEventListener('pointerleave', () => {
+      ring.style.opacity = '0'
+    })
+  }
+
   hero.addEventListener('pointermove', (e) => {
-    // A pause longer than a flick lifts the brush, so separate gestures don't get joined by a straight line.
-    if (e.timeStamp - lastMove > 160) brush.end()
-    lastMove = e.timeStamp
-    // Touch: only a sideways drag paints; vertical drags stay scrolls (touch-action: pan-y hands them to the page).
-    brush.move(...local(e))
+    script = false
+    overLink = Boolean((e.target as Element).closest('a, button'))
+    const [lx, ly] = local(e)
+    if (overLink) strings.releaseDisc()
+    else strings.setDisc(lx, ly, R, fine)
   })
-  hero.addEventListener('pointerleave', () => brush.end())
-  hero.addEventListener('pointercancel', () => brush.end(0))
+  hero.addEventListener('pointerleave', () => strings.releaseDisc(true))
+  hero.addEventListener('pointercancel', () => strings.releaseDisc(true))
   hero.addEventListener('pointerup', (e) => {
-    if (e.pointerType !== 'mouse') brush.end()
+    if (e.pointerType !== 'mouse') strings.releaseDisc(true)
+  })
+  hero.addEventListener('pointerdown', (e) => {
+    if ((e.target as Element).closest('a, button')) return
+    strings.pluck(...local(e))
   })
 
-  if (ring && finePointer()) initCursor(hero, ring, brush)
-  paintIntro(hero, brush)
+  strings.reveal()
+  // One unhurried pass up through the name so the first thing you see is the lines reacting.
+  const meta = hero.querySelector<HTMLElement>('[data-hero-meta]')
+  const t0 = performance.now() + 1000
+  const dur = 2200
+  const sweep = (now: number) => {
+    if (!script) return
+    const u = (now - t0) / dur
+    if (u < 0) return requestAnimationFrame(sweep)
+    if (u >= 1) {
+      strings.releaseDisc(true)
+      return
+    }
+    // Read the size every frame so a resize mid-intro keeps the pass on screen.
+    const w = hero.clientWidth
+    const h = meta
+      ? meta.getBoundingClientRect().top - hero.getBoundingClientRect().top
+      : hero.clientHeight * 0.7
+    const e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2
+    const x = -60 + (w + 120) * e
+    const y = h * (0.72 - 0.5 * e)
+    strings.setDisc(x, y, fine ? 44 : 32, false)
+    requestAnimationFrame(sweep)
+    return undefined
+  }
+  requestAnimationFrame(sweep)
 }
 
 /** Reveal the role the way a chat model streams tokens: uneven chunks, uneven gaps. */
@@ -186,8 +197,8 @@ export const initHero = () => {
   const chars = [...hero.querySelectorAll<HTMLElement>('[data-char]')]
   const stream = hero.querySelector<HTMLElement>('[data-stream]')
   const caret = hero.querySelector<HTMLElement>('[data-caret]')
-  const canvas = hero.querySelector<HTMLCanvasElement>('[data-paint]')
-  const ring = hero.querySelector<HTMLElement>('[data-brush-ring]')
+  const canvas = hero.querySelector<HTMLCanvasElement>('[data-hero-canvas]')
+  const ring = hero.querySelector<HTMLElement>('[data-cursor-ring]')
 
   const repin = () => pinLetterWidths(chars)
   document.fonts.ready.then(repin)
@@ -198,6 +209,8 @@ export const initHero = () => {
   })
 
   if (reducedMotion()) {
+    // The ruled wall is part of the look, not an effect: keep it, just still.
+    if (canvas) mountStrings(hero, canvas)
     hero.classList.add('is-ready')
     return
   }
@@ -215,7 +228,7 @@ export const initHero = () => {
       if (stream) streamText(stream, caret)
     }, 0.55)
 
-  if (canvas) initPaint(hero, canvas, ring)
+  if (canvas) initStrings(hero, canvas, ring)
   if (finePointer()) initVariableName(hero, chars)
 
   // Name drifts up and the avatar sinks as you leave the hero, so the exit has depth instead of a hard cut.
