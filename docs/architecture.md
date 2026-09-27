@@ -12,7 +12,7 @@
 | Lint/Format | Biome | ESLint + Prettier の置き換え |
 | E2E | Playwright | `tests/` |
 
-2026-09 に Gatsby 5 から移行した。Gatsby 時代の `schedule.yml` は gitignore 済みの `public/` を `git diff` しており、実質一度もデプロイしていなかった。
+2026-09 に Gatsby 5 から移行した。既存の記事・タグの URL は維持している。
 
 ## ディレクトリ
 
