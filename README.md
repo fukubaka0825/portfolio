@@ -1,6 +1,6 @@
 # fukubaka0825.dev
 
-Takashi Narikawa (@fukubaka0825) のポートフォリオ — https://www.fukubaka0825.dev
+Takashi Narikawa (@fukubaka0825) のポートフォリオ — https://fukubaka0825.dev
 
 Astro 7 / Tailwind CSS v4 / GSAP + Lenis / Cloudflare Workers Static Assets
 
