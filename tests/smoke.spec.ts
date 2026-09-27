@@ -83,8 +83,7 @@ for (const path of [
 }
 
 test('feeds and seo endpoints exist', async ({ request }) => {
-  for (const path of ['/rss.xml', '/sitemap-index.xml', '/robots.txt', '/og.png', '/CNAME']) {
+  for (const path of ['/rss.xml', '/sitemap-index.xml', '/robots.txt', '/og.png']) {
     expect((await request.get(path)).status(), path).toBe(200)
   }
-  expect(await (await request.get('/CNAME')).text()).toContain('www.fukubaka0825.dev')
 })

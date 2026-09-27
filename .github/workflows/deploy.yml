@@ -1,87 +1,26 @@
-name: Deploy
+name: Rebuild external feeds
 
 on:
-  push:
-    branches: [main]
   schedule:
-    # 06:17 JST daily: pulls in new posts from the external feeds shown in the Writing section.
+    # 06:17 JST daily: refresh the external feeds shown in the Writing section.
     - cron: '17 21 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Serialize publishes so a push and the scheduled rebuild never race on force_orphan gh-pages.
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
-  ci:
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/ci.yml
-
-  deploy:
-    needs: ci
-    # `needs` on a skipped job would skip this one too; scheduled runs deliberately bypass the full CI.
-    if: ${{ !cancelled() && !failure() }}
+  rebuild:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npx astro build
-
-      - name: Compare with the live site
-        id: diff
+      - name: Trigger Cloudflare Workers build
+        env:
+          DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_WORKERS_DEPLOY_HOOK }}
         run: |
-          git fetch --depth=1 origin gh-pages
-          git worktree add --detach /tmp/live origin/gh-pages
-          if diff -rq --exclude=.git /tmp/live dist > /tmp/diff.txt; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            head -50 /tmp/diff.txt
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo '::error::CLOUDFLARE_WORKERS_DEPLOY_HOOK is not configured'
+            exit 1
           fi
-
-      - name: Publish to gh-pages
-        # Scheduled rebuilds only publish when a feed actually produced new output.
-        if: github.event_name != 'schedule' || steps.diff.outputs.changed == 'true'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          # GITHUB_TOKEN instead of a PAT: nothing to expire (the old GH_TOKEN PAT silently died in 2026).
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
-          force_orphan: true
-          cname: www.fukubaka0825.dev
-          user_name: github-actions[bot]
-          user_email: github-actions[bot]@users.noreply.github.com
-          commit_message: 'Deploy ${{ github.sha }} (${{ github.event_name }})'
-
-  lighthouse-prod:
-    name: Lighthouse (production)
-    needs: deploy
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - name: Wait for Pages to serve the new build
-        run: sleep 90
-      - uses: treosh/lighthouse-ci-action@12.6.2
-        with:
-          urls: |
-            https://www.fukubaka0825.dev/
-            https://www.fukubaka0825.dev/blog/
-          configPath: ./lighthouserc.prod.json
-          uploadArtifacts: true
-          temporaryPublicStorage: true
+          curl -q --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --output /dev/null --request POST "$DEPLOY_HOOK"

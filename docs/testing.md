@@ -16,7 +16,7 @@ npx playwright test --ui     # デバッグ
 - 横スクロールが発生しない
 - reduced motion でも肩書きが全文表示される
 - Gatsby 時代のURL（記事・タグ・`/blog/`）が 200 を返す
-- `rss.xml` / `sitemap-index.xml` / `robots.txt` / `og.png` / `CNAME` が配信される
+- `rss.xml` / `sitemap-index.xml` / `robots.txt` / `og.png` が配信される
 
 `tests/interactions.spec.ts` が見ているもの:
 
@@ -32,7 +32,7 @@ npx playwright test --ui     # デバッグ
 
 PR では `dist/` に対して `lighthouserc.json` の予算で実行（performance は warn、それ以外は error）。
 
-ローカルで測るときは**gzip する静的サーバー**を使う（本番の GitHub Pages は gzip する）。`python3 -m http.server` や `astro preview` は圧縮しないので、HTML や CSS が生のサイズで計測され、FCP/LCP が実際より数秒悪く出る。
+ローカルで測るときは**gzip する静的サーバー**を使う（本番の Cloudflare Workers Static Assets は圧縮して配信する）。`python3 -m http.server` や `astro preview` は圧縮しないので、HTML や CSS が生のサイズで計測され、FCP/LCP が実際より数秒悪く出る。
 
 ```sh
 npx astro build --outDir .qa-dist

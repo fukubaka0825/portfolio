@@ -6,7 +6,7 @@ Takashi Narikawa (@fukubaka0825) のポートフォリオ https://www.fukubaka08
 ## 30秒で把握
 
 - Astro 7（静的出力）+ Tailwind CSS v4 + TypeScript。演出は GSAP + Lenis。React は使っていない
-- `main` へ merge すると GitHub Actions がビルドして `gh-pages` ブランチへ publish（GitHub Pages / CNAME `www.fukubaka0825.dev`）。手順は [docs/deploy.md](docs/deploy.md#本番へのリリース手順)
+- `main` へ merge すると Cloudflare Workers Builds が Astro をビルドし、Workers Static Assets へ公開する。毎日の外部フィード更新は GitHub Actions から Deploy Hook で再ビルドする。手順は [docs/deploy.md](docs/deploy.md#本番へのリリース手順)
 - 本文データは `src/data/*.ts`、ブログ記事は `src/content/blog/*.md`
 
 ## よく使うコマンド

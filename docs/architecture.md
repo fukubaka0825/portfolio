@@ -28,7 +28,7 @@ src/
   pages/         ルーティング
   scripts/       クライアント側の演出（motion, smooth, hero, career, works）
   styles/        global.css（デザイントークン）
-public/          そのまま配信（CNAME, favicon, og.png, manifest, robots.txt）
+public/          そのまま配信（favicon, og.png, manifest, robots.txt）
 tests/           Playwright
 tools/           og.html / og.mjs（OG画像の生成）
 ```
