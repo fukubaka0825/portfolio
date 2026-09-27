@@ -42,7 +42,7 @@ main push ──> Workers Builds: npm run build(フィード取得あり) → np
 
 - Worker 名は `fukubaka0825-portfolio`。`wrangler.jsonc` の `assets.directory` は `./dist`、HTML は末尾スラッシュを保ち、存在しないパスには `404.html` を返す
 - Worker のカスタムドメインは `www.fukubaka0825.dev`。Cloudflare DNS が権威 DNS、apex は Cloudflare Redirect Rule で `https://www.fukubaka0825.dev` に 301 リダイレクトする
-- GitHub Pages の `gh-pages` ブランチと `public/CNAME` は公開に使わない
+- `public/CNAME` は不要。DNS 切り替え直後は一部の再帰 DNS に旧 Route 53 のネームサーバーがキャッシュされるため、`gh-pages` ブランチと GitHub Pages の独自ドメイン設定はキャッシュが切れるまで残す。Cloudflare を参照する利用者には Worker が配信される
 
 ## Secrets
 
