@@ -1,0 +1,9 @@
+{
+  "name": "fukubaka0825-portfolio",
+  "compatibility_date": "2026-09-27",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

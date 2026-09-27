@@ -12,3 +12,4 @@ playwright-report/
 .preview-dist/
 .claude/
 .qa-dist/
+.wrangler/

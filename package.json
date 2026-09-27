@@ -38,6 +38,7 @@
     "@biomejs/biome": "^2.5.14",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/typography": "^0.5.20",
-    "@types/node": "^26.6.2"
+    "@types/node": "^26.6.2",
+    "wrangler": "^4.141.0"
   }
 }
