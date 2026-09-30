@@ -7,7 +7,7 @@ Takashi Narikawa (@fukubaka0825) のポートフォリオ https://www.fukubaka08
 
 - Astro 7（静的出力）+ Tailwind CSS v4 + TypeScript。演出は GSAP + Lenis。React は使っていない
 - `main` へ merge すると Cloudflare Workers Builds が Astro をビルドし、Workers Static Assets へ公開する。毎日の外部フィード更新は GitHub Actions から Deploy Hook で再ビルドする。手順は [docs/deploy.md](docs/deploy.md#本番へのリリース手順)
-- ドメイン登録と DNS は Cloudflare。`www.fukubaka0825.dev` は Worker、apex は `www` へ 301 リダイレクトする。旧 DNS キャッシュ対策で GitHub Pages を一時的に残している（[停止条件](docs/deploy.md#旧-github-pages-の停止)）
+- ドメイン登録と DNS は Cloudflare。`www.fukubaka0825.dev` は Worker、apex は `www` へ 301 リダイレクトする
 - 本文データは `src/data/*.ts`、ブログ記事は `src/content/blog/*.md`
 
 ## よく使うコマンド
