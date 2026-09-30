@@ -42,13 +42,7 @@ main push ──> Workers Builds: npm run build(フィード取得あり) → np
 
 - Worker 名は `fukubaka0825-portfolio`。`wrangler.jsonc` の `assets.directory` は `./dist`、HTML は末尾スラッシュを保ち、存在しないパスには `404.html` を返す
 - ドメイン登録と権威 DNS は Cloudflare。Worker のカスタムドメインは `www.fukubaka0825.dev`、apex は Cloudflare Redirect Rule で `https://www.fukubaka0825.dev` に 301 リダイレクトする
-- `public/CNAME` は不要。旧 Route 53 の DNS 情報を保持する利用者向けに、GitHub Pages と `gh-pages` ブランチは一時的に残している。現在の本番デプロイには使用しない
-
-## 旧 GitHub Pages の停止
-
-Cloudflare Registrar の移管は完了している。DNS の切り替え時にキャッシュされた旧 Route 53 の NS レコードは、移管完了とは別に期限が切れるまで残り得る。実際に切り替え直後は、公開 DNS が Cloudflare を返しても、一部の端末の `www` への HTTPS 接続は GitHub Pages に到達した。旧 NS の TTL は切り替え時に約 48 時間だったため、切り替えから少なくとも 48 時間は Pages を停止しない。
-
-期限が過ぎたら、公開 DNS と端末の両方で `www` の A / AAAA レコードが Cloudflare を指し、apex から `www` への 301 リダイレクトと既存ページの表示が正常なことを確認する。その後、GitHub の Settings → Pages で公開元ブランチを `None` にして Pages を停止し、不要な `gh-pages` ブランチを削除する。最後に、この暫定運用の記述を `AGENTS.md` と本ファイルから削除する。
+- GitHub Pages は 2026年9月30日に公開元ブランチを `None` にして停止し、`gh-pages` ブランチも削除済み。本番は Cloudflare Workers Static Assets で公開するため、`public/CNAME` は不要
 
 ## Secrets
 
