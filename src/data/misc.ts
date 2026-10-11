@@ -38,7 +38,7 @@ export const languages = [
 ]
 
 // Zenn には AI 生成寄りの記事も混ざるので、RSS 全件ではなく載せると決めた記事の slug だけを通す。
-export const zennAllowlist = new Set(['1ef743cd9ae17e'])
+export const zennAllowlist = new Set(['1ef743cd9ae17e', '29231f739cd547'])
 
 // Qiita は51件あって他媒体を圧倒するので、載せると決めた記事の URL だけを通す。
 export const qiitaPicks = [
