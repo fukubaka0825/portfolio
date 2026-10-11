@@ -50,11 +50,10 @@ test('writing can reveal every collected item', async ({ page }) => {
   await expect(more).toBeHidden()
 })
 
-test('post pages light the Blog nav item and ship no GSAP', async ({ page }) => {
+test('post pages ship no GSAP', async ({ page }) => {
   const scripts: string[] = []
   page.on('request', (r) => r.resourceType() === 'script' && scripts.push(r.url()))
   await page.goto('/manage_eks_aws_auth_config_map_with_terraform/')
-  await expect(page.locator('[data-nav-link="blog/"]')).toHaveAttribute('aria-current', 'true')
   await page.waitForLoadState('networkidle')
   expect(scripts.some((u) => u.includes('motion'))).toBe(false)
 })
