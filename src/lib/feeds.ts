@@ -1,10 +1,20 @@
 import { XMLParser } from 'fast-xml-parser'
+import { qiitaPicks, zennAllowlist } from '~/data/misc'
 
-export type FeedSource = 'Hatena' | 'Medium' | 'dev.to' | 'Qiita' | 'Speaker Deck'
+export type FeedSource = 'Hatena' | 'Medium' | 'dev.to' | 'Qiita' | 'Zenn' | 'Speaker Deck'
 
 export type FeedItem = { title: string; url: string; date: string; source: FeedSource }
 
-const FEEDS: { source: FeedSource; url: string; home: string }[] = [
+// Guards sources that have no allowlist; Qiita and Zenn are curated via `keep` instead.
+const MAX_PER_SOURCE = 12
+
+const FEEDS: {
+  source: FeedSource
+  url: string
+  home: string
+  keep?: (i: FeedItem) => boolean
+  parse?: (body: string) => FeedItem[]
+}[] = [
   {
     source: 'Hatena',
     url: 'https://fukubaka0825.hatenablog.com/rss',
@@ -16,7 +26,26 @@ const FEEDS: { source: FeedSource; url: string; home: string }[] = [
     home: 'https://medium.com/@fukubaka0825',
   },
   { source: 'dev.to', url: 'https://dev.to/feed/fukubaka0825', home: 'https://dev.to/fukubaka0825' },
-  { source: 'Qiita', url: 'https://qiita.com/fukubaka0825/feed', home: 'https://qiita.com/fukubaka0825' },
+  {
+    source: 'Qiita',
+    // The RSS feed only carries the latest 4 of 51 items; the v2 API (unauthenticated, 100/page) returns them all.
+    url: 'https://qiita.com/api/v2/users/fukubaka0825/items?per_page=100',
+    home: 'https://qiita.com/fukubaka0825',
+    keep: (i) => qiitaPicks.includes(i.url),
+    parse: (body) =>
+      (JSON.parse(body) as { title: string; url: string; created_at: string }[]).map((i) => ({
+        title: i.title,
+        url: i.url,
+        date: new Date(i.created_at).toISOString(),
+        source: 'Qiita',
+      })),
+  },
+  {
+    source: 'Zenn',
+    url: 'https://zenn.dev/fukubaka0825/feed',
+    home: 'https://zenn.dev/fukubaka0825',
+    keep: (i) => zennAllowlist.has(i.url.split('/').pop() ?? ''),
+  },
   {
     source: 'Speaker Deck',
     url: 'https://speakerdeck.com/fukubaka0825.atom',
@@ -67,9 +96,11 @@ const fetchOne = async (f: (typeof FEEDS)[number]): Promise<FeedItem[]> => {
       signal: AbortSignal.timeout(10_000),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return parse(await res.text(), f.source).filter(
-      (i) => i.title && i.url && !Number.isNaN(Date.parse(i.date)),
-    )
+    const body = await res.text()
+    return (f.parse?.(body) ?? parse(body, f.source))
+      .filter((i) => i.title && i.url && !Number.isNaN(Date.parse(i.date)) && (f.keep?.(i) ?? true))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, MAX_PER_SOURCE)
   } catch (err) {
     // A flaky third-party feed (Qiita rate limits, Medium 403s) must never break a deploy; the section just shrinks.
     console.warn(`[feeds] skip ${f.source}: ${(err as Error).message}`)

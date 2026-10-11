@@ -1,33 +1,19 @@
 ---
-import { getCollection } from 'astro:content'
 import { feedHomes, getFeedItems } from '~/lib/feeds'
 import { formatDate } from '~/lib/format'
 
 const LIMIT = 12
-const posts = await getCollection('blog')
-type Entry = { title: string; url: string; date: string; source: string; local?: boolean }
-const local: Entry[] = posts.map((p) => ({
-  title: p.data.title,
-  url: `/${p.id}/`,
-  date: p.data.date.toISOString(),
-  source: 'Blog',
-  local: true,
-}))
-const external = await getFeedItems()
-const items: Entry[] = [...external, ...local]
-  .sort((a, b) => b.date.localeCompare(a.date))
-  .slice(0, LIMIT * 2)
-const sources = [...new Set(items.map((i) => i.source))]
+// getFeedItems already sorts newest-first and nothing is cut here, so the media filter can reveal older posts the "all" view pushes below the fold.
+const items = await getFeedItems()
+const sources: string[] = [...new Set(items.map((i) => i.source))]
+// Same order as the filter chips; a source with no items right now (feed failed) falls to the end instead of vanishing.
+const rank = (name: string) => (sources.includes(name) ? sources.indexOf(name) : sources.length)
+const homes = Object.entries(feedHomes).sort(([a], [b]) => rank(a) - rank(b))
 ---
 
 <section id="writing" class="bg-paper pb-24 sm:pb-32">
   <div class="wrap">
-    <div class="grid gap-6 md:grid-cols-[1fr_minmax(0,28rem)] md:items-end">
-      <h2 class="display text-[clamp(3.2rem,9vw,8rem)] font-extrabold">Writing</h2>
-      <p class="text-[1rem] leading-[1.9] text-ink/75">
-        各プラットフォームに書いたものを、ビルドのたびに集めて新しい順に並べています。
-      </p>
-    </div>
+    <h2 class="display text-[clamp(3.2rem,9vw,8rem)] font-extrabold">Writing</h2>
 
     <div class="mt-10 flex flex-wrap gap-2" role="group" aria-label="媒体で絞り込む" data-filter>
       <button type="button" aria-pressed="true" data-source="all" class="chip">すべて</button>
@@ -46,7 +32,8 @@ const sources = [...new Set(items.map((i) => i.source))]
           <li class="border-t border-line" data-item data-source={item.source} hidden={i >= LIMIT}>
             <a
               href={item.url}
-              {...(item.local ? {} : { target: '_blank', rel: 'noopener' })}
+              target="_blank"
+              rel="noopener"
               class="group flex flex-col gap-1 py-4"
             >
               <span class="flex gap-3 text-[0.82rem] text-mist tnum">
@@ -72,9 +59,8 @@ const sources = [...new Set(items.map((i) => i.source))]
     </button>
 
     <ul class="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-[0.95rem]">
-      <li><a href="/blog/" class="font-semibold underline decoration-hoodie decoration-2">このサイトのブログ</a></li>
       {
-        Object.entries(feedHomes).map(([name, href]) => (
+        homes.map(([name, href]) => (
           <li>
             <a href={href} target="_blank" rel="noopener" class="text-ink/75 underline decoration-line decoration-2 hover:decoration-hoodie">
               {name}

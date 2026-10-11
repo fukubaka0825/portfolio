@@ -41,6 +41,8 @@
 
 ## ブログ — `src/content/blog/*.md`
 
+運用はしておらず、トップの Writing・ナビからは導線を外している（記事2本は Gatsby 時代の URL 維持のため残している）。新しく書くときは外部媒体に書き、`src/lib/feeds.ts` で拾う。
+
 ```md
 ---
 title: 'タイトル'
