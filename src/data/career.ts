@@ -151,8 +151,9 @@ export const roles: Role[] = [
       'ユーザーメッセージデータをRDSからDynamoDBへ移行し暗号化',
       'GPUを用いた画像モデレーション・不正画像検知の導入',
       'Argo CDとOIDCでGitOpsを導入、Policy as CodeでTerraformのレビューを自動化',
+      'ログ基盤をFluentdからFluent Bitへ移行',
     ],
-    stack: ['Go', 'AWS', 'Terraform', 'Kubernetes', 'Argo CD', 'OPA'],
+    stack: ['Go', 'AWS', 'Terraform', 'Kubernetes', 'Argo CD', 'OPA', 'Fluent Bit'],
   },
   {
     id: 'wano',
