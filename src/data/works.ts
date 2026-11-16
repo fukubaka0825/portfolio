@@ -5,6 +5,7 @@ import buildersFlash from '~/assets/works/builders-flash.png'
 import e34 from '~/assets/works/e34fm.png'
 import infraCareer from '~/assets/works/infra-career-lounge.png'
 import langfuse from '~/assets/works/langfuse-night.png'
+import pairsNavi from '~/assets/works/pairs-navi.png'
 import shiganai from '~/assets/works/shiganai.png'
 import slackbot from '~/assets/works/slackbot-book.jpg'
 import sreLounge from '~/assets/works/sre-lounge.png'
@@ -24,6 +25,14 @@ export type Work = {
 }
 
 export const works: Work[] = [
+  {
+    title: '全社員の仕事を AI Native にする、ペアーズの内製 Background Agent 基盤「Pairs Navi」',
+    venue: 'eureka Engineering Blog',
+    year: 2026,
+    kind: 'Article',
+    url: 'https://medium.com/eureka-engineering/ai-agent-pairs-navi-overview-cd1bd92daec6',
+    image: pairsNavi,
+  },
   {
     title: 'ペアーズにおける評価ドリブンな AI Agent 開発のご紹介',
     venue: 'AWS ウェビナー',
